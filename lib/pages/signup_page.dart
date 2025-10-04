@@ -130,7 +130,7 @@ class _SignUpPageState extends State<SignUpPage> {
     return Container(
       height: isMobile ? 200 : double.infinity,
       decoration: BoxDecoration(
-        color: Colors.blueAccent.shade100.withOpacity(0.2),
+        color: Colors.blueAccent.shade100.withValues(alpha:0.2),
         borderRadius: isMobile
             ? const BorderRadius.vertical(top: Radius.circular(20))
             : const BorderRadius.horizontal(left: Radius.circular(20)),
@@ -142,7 +142,7 @@ class _SignUpPageState extends State<SignUpPage> {
             left: 30,
             child: CircleAvatar(
               radius: 25,
-              backgroundColor: Colors.blueAccent.withOpacity(0.3),
+              backgroundColor: Colors.blueAccent.withValues(alpha:0.3),
             ),
           ),
           Positioned(
@@ -150,7 +150,7 @@ class _SignUpPageState extends State<SignUpPage> {
             right: 40,
             child: CircleAvatar(
               radius: 40,
-              backgroundColor: Colors.teal.withOpacity(0.25),
+              backgroundColor: Colors.teal.withValues(alpha:0.25),
             ),
           ),
           Positioned(
@@ -158,7 +158,7 @@ class _SignUpPageState extends State<SignUpPage> {
             left: 50,
             child: CircleAvatar(
               radius: 12,
-              backgroundColor: Colors.deepPurpleAccent.withOpacity(0.3),
+              backgroundColor: Colors.deepPurpleAccent.withValues(alpha:0.3),
             ),
           ),
           Positioned(
@@ -358,7 +358,7 @@ class BackgroundPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withOpacity(0.2)
+      ..color = Colors.white.withValues(alpha:0.2)
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 
@@ -375,7 +375,7 @@ class BackgroundPainter extends CustomPainter {
     canvas.drawPath(path2, paint);
 
     final circlePaint = Paint()
-      ..color = Colors.white.withOpacity(0.25)
+      ..color = Colors.white.withValues(alpha:0.25)
       ..style = PaintingStyle.fill;
 
     canvas.drawCircle(

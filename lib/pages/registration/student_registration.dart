@@ -168,7 +168,7 @@ class _StudentRegistrationState extends State<StudentRegistration> {
   Widget _dropdownField(String label, String? value,
       Function(String?) onChanged, List<String> items) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       onChanged: onChanged,
       decoration: _inputDecoration(label),
       items: items

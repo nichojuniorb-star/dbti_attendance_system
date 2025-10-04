@@ -164,7 +164,7 @@ class BackgroundPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withOpacity(0.2)
+      ..color = Colors.white.withValues(alpha:0.2)
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 
@@ -181,7 +181,7 @@ class BackgroundPainter extends CustomPainter {
     canvas.drawPath(path2, paint);
 
     final circlePaint = Paint()
-      ..color = Colors.white.withOpacity(0.25)
+      ..color = Colors.white.withValues(alpha:0.25)
       ..style = PaintingStyle.fill;
 
     canvas.drawCircle(

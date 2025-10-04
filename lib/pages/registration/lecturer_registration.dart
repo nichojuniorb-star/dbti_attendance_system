@@ -92,7 +92,7 @@ class _LecturerRegistrationState extends State<LecturerRegistration> {
 
               /// 🔹 Gender Dropdown
               DropdownButtonFormField<String>(
-                value: _gender,
+                 initialValue: _gender,
                 onChanged: (val) => setState(() => _gender = val),
                 decoration: _inputDecoration("Gender"),
                 items: ["Male", "Female"]
