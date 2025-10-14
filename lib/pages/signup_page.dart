@@ -1,3 +1,4 @@
+// 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -14,6 +15,12 @@ class _SignUpPageState extends State<SignUpPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
+  // ADDED: Focus nodes for keyboard navigation
+  final FocusNode _usernameFocusNode = FocusNode();
+  final FocusNode _emailFocusNode = FocusNode();
+  final FocusNode _passwordFocusNode = FocusNode();
+  final FocusNode _confirmPasswordFocusNode = FocusNode();
+
   bool _isLoading = false;
   bool _isEmailVisible = false;
   bool _isPasswordVisible = false;
@@ -22,10 +29,23 @@ class _SignUpPageState extends State<SignUpPage> {
   Future<void> _signUp() async {
     if (_passwordController.text.trim() !=
         _confirmPasswordController.text.trim()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Passwords do not match")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Passwords do not match")),
+        );
+      }
       return;
+    }
+
+    if (_usernameController.text.trim().isEmpty || 
+        _emailController.text.trim().isEmpty || 
+        _passwordController.text.trim().isEmpty) {
+        if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("All fields are required.")),
+            );
+        }
+        return;
     }
 
     setState(() => _isLoading = true);
@@ -39,20 +59,46 @@ class _SignUpPageState extends State<SignUpPage> {
       );
 
       if (response.user != null) {
-        Navigator.pushReplacementNamed(context, '/home');
+        if (mounted) Navigator.pushReplacementNamed(context, '/home');
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Sign up successful, please check your email to verify."),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Sign up successful, please check your email to verify."),
+            ),
+          );
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Sign Up failed: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Sign Up failed: $e")),
+        );
+      }
     }
     setState(() => _isLoading = false);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Automatically focus on the username field when the page loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _usernameFocusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _usernameFocusNode.dispose();
+    _emailFocusNode.dispose();
+    _passwordFocusNode.dispose();
+    _confirmPasswordFocusNode.dispose();
+    super.dispose();
   }
 
   @override
@@ -130,7 +176,8 @@ class _SignUpPageState extends State<SignUpPage> {
     return Container(
       height: isMobile ? 200 : double.infinity,
       decoration: BoxDecoration(
-        color: Colors.blueAccent.shade100.withValues(alpha:0.2),
+        // REVERTED to original syntax to satisfy local SDK environment
+        color: Colors.blueAccent.shade100.withValues(alpha: 0.2),
         borderRadius: isMobile
             ? const BorderRadius.vertical(top: Radius.circular(20))
             : const BorderRadius.horizontal(left: Radius.circular(20)),
@@ -142,7 +189,8 @@ class _SignUpPageState extends State<SignUpPage> {
             left: 30,
             child: CircleAvatar(
               radius: 25,
-              backgroundColor: Colors.blueAccent.withValues(alpha:0.3),
+              // REVERTED to original syntax to satisfy local SDK environment
+              backgroundColor: Colors.blueAccent.withValues(alpha: 0.3),
             ),
           ),
           Positioned(
@@ -150,7 +198,8 @@ class _SignUpPageState extends State<SignUpPage> {
             right: 40,
             child: CircleAvatar(
               radius: 40,
-              backgroundColor: Colors.teal.withValues(alpha:0.25),
+              // REVERTED to original syntax to satisfy local SDK environment
+              backgroundColor: Colors.teal.withValues(alpha: 0.25),
             ),
           ),
           Positioned(
@@ -158,7 +207,8 @@ class _SignUpPageState extends State<SignUpPage> {
             left: 50,
             child: CircleAvatar(
               radius: 12,
-              backgroundColor: Colors.deepPurpleAccent.withValues(alpha:0.3),
+              // REVERTED to original syntax to satisfy local SDK environment
+              backgroundColor: Colors.deepPurpleAccent.withValues(alpha: 0.3),
             ),
           ),
           Positioned(
@@ -233,12 +283,19 @@ class _SignUpPageState extends State<SignUpPage> {
           ),
           const SizedBox(height: 20),
 
-          // Username
+          // Username - Autofocus and navigation to Email
           TextField(
+            autofocus: true, // Auto-focus handled in initState, but kept here for clarity
+            focusNode: _usernameFocusNode,
             controller: _usernameController,
+            textInputAction: TextInputAction.next,
+            onSubmitted: (_) {
+              FocusScope.of(context).requestFocus(_emailFocusNode);
+            },
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.person),
               labelText: "Username",
+              hintText: "Enter your full name or preferred username", // New placeholder
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -246,13 +303,19 @@ class _SignUpPageState extends State<SignUpPage> {
           ),
           const SizedBox(height: 15),
 
-          // Email with toggle
+          // Email with toggle - Navigation to Password
           TextField(
+            focusNode: _emailFocusNode,
             controller: _emailController,
             obscureText: !_isEmailVisible,
+            textInputAction: TextInputAction.next,
+            onSubmitted: (_) {
+              FocusScope.of(context).requestFocus(_passwordFocusNode);
+            },
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.email),
               labelText: "Email",
+              hintText: "Enter your official email address", // New placeholder
               suffixIcon: IconButton(
                 icon: Icon(
                   _isEmailVisible ? Icons.visibility_off : Icons.visibility,
@@ -268,13 +331,19 @@ class _SignUpPageState extends State<SignUpPage> {
           ),
           const SizedBox(height: 15),
 
-          // Password
+          // Password - Navigation to Confirm Password
           TextField(
+            focusNode: _passwordFocusNode,
             controller: _passwordController,
             obscureText: !_isPasswordVisible,
+            textInputAction: TextInputAction.next,
+            onSubmitted: (_) {
+              FocusScope.of(context).requestFocus(_confirmPasswordFocusNode);
+            },
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.lock),
               labelText: "Password",
+              hintText: "Create a secure password", // New placeholder
               suffixIcon: IconButton(
                 icon: Icon(
                   _isPasswordVisible
@@ -292,13 +361,17 @@ class _SignUpPageState extends State<SignUpPage> {
           ),
           const SizedBox(height: 15),
 
-          // Confirm Password
+          // Confirm Password - ENTER Submission
           TextField(
+            focusNode: _confirmPasswordFocusNode,
             controller: _confirmPasswordController,
             obscureText: !_isConfirmPasswordVisible,
+            textInputAction: TextInputAction.done, // ENTER triggers submission
+            onSubmitted: (_) => _signUp(), // ENTER calls the sign-up function
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.lock_outline),
               labelText: "Confirm Password",
+              hintText: "Repeat your password to confirm", // New placeholder
               suffixIcon: IconButton(
                 icon: Icon(
                   _isConfirmPasswordVisible
@@ -358,7 +431,8 @@ class BackgroundPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha:0.2)
+      // REVERTED to original syntax to satisfy local SDK environment
+      ..color = Colors.white.withValues(alpha: 0.2)
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 
@@ -375,7 +449,8 @@ class BackgroundPainter extends CustomPainter {
     canvas.drawPath(path2, paint);
 
     final circlePaint = Paint()
-      ..color = Colors.white.withValues(alpha:0.25)
+      // REVERTED to original syntax to satisfy local SDK environment
+      ..color = Colors.white.withValues(alpha: 0.25)
       ..style = PaintingStyle.fill;
 
     canvas.drawCircle(

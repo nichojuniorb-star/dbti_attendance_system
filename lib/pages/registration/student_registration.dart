@@ -13,25 +13,27 @@ class _StudentRegistrationState extends State<StudentRegistration> {
   final _lastNameController = TextEditingController();
   final _idController = TextEditingController();
   String? _technology;
-  String? _program;
+  String? _program; // Correct variable name from source: 'program' [cite: 1098]
   String? _gender;
-  String? _year;
+  String? _year; // Correct variable name from source: 'year' [cite: 1100]
 
-  /// 🔹 Save student to Supabase
+  /// Save student to Supabase
   Future<void> _saveStudent() async {
     try {
       await Supabase.instance.client.from('students').insert({
         'student_id': _idController.text.trim(),
-        'full_name':
+        "full_name":
             "${_firstNameController.text.trim()} ${_lastNameController.text.trim()}",
         'technology': _technology,
         'program': _program,
         'sex': _gender,
-        'year': _year,
+        "year": _year,
       });
 
+      // FIX APPLIED: Guarded context use (Line 33 in error report)
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("✅ Student registered successfully!")),
+        const SnackBar(content: Text("✔ Student registered successfully!")),
       );
 
       // Clear fields after save
@@ -45,8 +47,10 @@ class _StudentRegistrationState extends State<StudentRegistration> {
         _year = null;
       });
     } catch (e) {
+      // FIX APPLIED: Guarded context use (Line 48 in error report)
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("❌ Error: $e")),
+        SnackBar(content: Text("X Error: $e")),
       );
     }
   }
@@ -60,7 +64,7 @@ class _StudentRegistrationState extends State<StudentRegistration> {
           width: 380,
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: Colors.white, // 🔹 Clean white box
+            color: Colors.white, // Clean white box
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
@@ -82,67 +86,72 @@ class _StudentRegistrationState extends State<StudentRegistration> {
                 ),
               ),
               const SizedBox(height: 20),
-
-              /// 🔹 First Name
+              /// First Name
               TextField(
                 controller: _firstNameController,
                 style: const TextStyle(color: Colors.black),
                 decoration: _inputDecoration("First Name"),
               ),
               const SizedBox(height: 15),
-
-              /// 🔹 Last Name
+              /// Last Name
               TextField(
                 controller: _lastNameController,
                 style: const TextStyle(color: Colors.black),
                 decoration: _inputDecoration("Last Name"),
               ),
               const SizedBox(height: 15),
-
-              /// 🔹 Student ID
+              /// Student ID
               TextField(
                 controller: _idController,
                 style: const TextStyle(color: Colors.black),
                 decoration: _inputDecoration("Student ID"),
               ),
               const SizedBox(height: 15),
-
-              /// 🔹 Dropdowns
-              _dropdownField("Technology", _technology,
-                  (val) => setState(() => _technology = val), [
-                "Information Technology",
-                "Electrical Technology",
-                "Electronic Technology",
-                "Instrumentation Technology",
-                "Machine Fitting & Machinery",
-                "Metal Fabrication & Welding",
-              ]),
+              /// Dropdowns
+              _dropdownField(
+                  "Technology",
+                  _technology,
+                  (val) => setState(() => _technology = val),
+                  [
+                    "Information Technology",
+                    "Electrical Technology",
+                    "Electronic Technology",
+                    "Instrumentation Technology",
+                    "Machine Fitting & Machinery",
+                    "Metal Fabrication & Welding",
+                  ]),
               const SizedBox(height: 15),
-
-              _dropdownField("Program", _program,
-                  (val) => setState(() => _program = val), [
-                "Bachelor Degree",
-                "Bachelor in Education",
-                "Diploma in Technology",
-              ]),
+              _dropdownField(
+                  "Program",
+                  _program,
+                  (val) => setState(() => _program = val),
+                  [
+                    "Bachelor Degree",
+                    "Bachelor in Education",
+                    "Diploma in Technology",
+                  ]),
               const SizedBox(height: 15),
-
-              _dropdownField("Gender", _gender,
-                  (val) => setState(() => _gender = val), [
-                "Male",
-                "Female",
-              ]),
+              _dropdownField(
+                  "Gender",
+                  _gender,
+                  (val) => setState(() => _gender = val),
+                  [
+                    "Male",
+                    "Female",
+                  ]),
               const SizedBox(height: 15),
-
-              _dropdownField("Year", _year, (val) => setState(() => _year = val), [
-                "First Year",
-                "Second Year",
-                "Third Year",
-                "Fourth Year",
-              ]),
+              _dropdownField(
+                  "Year",
+                  _year,
+                  (val) => setState(() => _year = val),
+                  [
+                    "First Year",
+                    "Second Year",
+                    "Third Year",
+                    "Fourth Year",
+                  ]),
               const SizedBox(height: 25),
-
-              /// 🔹 Save Button
+              /// Save Button
               ElevatedButton(
                 onPressed: _saveStudent,
                 style: ElevatedButton.styleFrom(
@@ -164,10 +173,11 @@ class _StudentRegistrationState extends State<StudentRegistration> {
     );
   }
 
-  /// 🔹 Reusable Dropdown Field
+  /// Reusable Dropdown Field
   Widget _dropdownField(String label, String? value,
       Function(String?) onChanged, List<String> items) {
     return DropdownButtonFormField<String>(
+      // FIX APPLIED: Replaced 'value' with 'initialValue'
       initialValue: value,
       onChanged: onChanged,
       decoration: _inputDecoration(label),
@@ -180,7 +190,7 @@ class _StudentRegistrationState extends State<StudentRegistration> {
     );
   }
 
-  /// 🔹 Input Decoration
+  /// Input Decoration
   InputDecoration _inputDecoration(String label) {
     return InputDecoration(
       labelText: label,

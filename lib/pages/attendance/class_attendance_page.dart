@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 
-
 class ClassAttendancePage extends StatefulWidget {
   const ClassAttendancePage({super.key});
 
@@ -16,7 +15,7 @@ class _ClassAttendancePageState extends State<ClassAttendancePage> {
   final TextEditingController _studentController = TextEditingController();
   final TextEditingController _lecturerController = TextEditingController();
 
-  String _activeField = "student"; // student or lecturer
+  String _activeField = "lecturer"; // Start focused on lecturer
   String _statusMessage = "Waiting for input...";
   bool _lecturerLocked = false;
   String? _substituteId;
@@ -50,28 +49,78 @@ class _ClassAttendancePageState extends State<ClassAttendancePage> {
   /// Submit attendance
   Future<void> _onSubmit() async {
     if (_studentController.text.isEmpty) {
-      setState(() => _statusMessage = "⚠ Please enter a Student ID.");
+      if (mounted) setState(() => _statusMessage = "⚠ Please enter a Student ID.");
       return;
     }
     if (_lecturerController.text.isEmpty && _substituteId == null) {
-      setState(() => _statusMessage = "⚠ Lecturer or Substitute ID is required.");
+      if (mounted) setState(() => _statusMessage = "⚠ Lecturer or Substitute ID is required.");
       return;
     }
+    
+    // Check if Lecturer field is active AND unlocked (meaning they haven't submitted their ID yet)
+    if (_activeField == "lecturer" && !_lecturerLocked) {
+      // Treat this submission as the attempt to lock the lecturer ID
+      if (_lecturerController.text.isNotEmpty) {
+        // Attempt to validate and lock the lecturer
+        await _validateAndLockLecturer();
+        return; 
+      }
+    }
+    
+    // If lecturer is locked, proceed with class attendance logic
+    if (_lecturerLocked || _substituteId != null) {
+      await _processClassAttendance();
+    } else {
+      if (mounted) setState(() => _statusMessage = "⚠ Please enter and confirm Lecturer ID first.");
+    }
+  }
 
+  // Helper function to handle lecturer validation and locking
+  Future<void> _validateAndLockLecturer() async {
+      final lecturerId = _lecturerController.text.trim();
+      try {
+          final lecturer = await supabase
+              .from('lecturers')
+              .select()
+              .eq('lecturer_id', lecturerId)
+              .maybeSingle(); 
+
+          if (!mounted) return;
+          if (lecturer == null) {
+              setState(() => _statusMessage = "⚠ Lecturer ID not found.");
+              return;
+          }
+
+          setState(() {
+              _lecturerLocked = true;
+              _activeField = "student";
+              _statusMessage = "✅ Lecturer confirmed. Ready for student IDs.";
+          });
+      } catch (e) {
+          if (mounted) setState(() => _statusMessage = "❌ Error validating lecturer: $e");
+      }
+  }
+  
+  // Helper function to process actual student attendance (Now includes Timetable Check)
+  Future<void> _processClassAttendance() async {
     final now = DateTime.now();
-    final cutoff = now.subtract(const Duration(minutes: 20));
-    String status = now.isAfter(cutoff) ? "Late" : "Present";
-
     final studentId = _studentController.text.trim();
+    final currentDay = _getDayOfWeek(now.weekday);
+
+    final classStartTime = 9; 
+    final lateTime = DateTime(now.year, now.month, now.day, classStartTime, 20); 
+
+    String status = now.isAfter(lateTime) ? "Late" : "Present";
+    
     final lecturerId = _lecturerController.text.trim().isNotEmpty
         ? _lecturerController.text.trim()
         : _substituteId;
 
     try {
-      // 🔹 Fetch student info
+      // 🔹 1. Fetch student info (including program details for timetable matching)
       final student = await supabase
           .from('students')
-          .select()
+          .select('full_name, program, technology, year')
           .eq('student_id', studentId)
           .maybeSingle();
 
@@ -81,23 +130,61 @@ class _ClassAttendancePageState extends State<ClassAttendancePage> {
         setState(() => _statusMessage = "⚠ Student not found.\nID: $studentId");
         return;
       }
-
+      
       final studentName = student['full_name'] ?? "Unknown";
+      final studentProgram = student['program'] ?? "N/A";
+      final studentTechnology = student['technology'] ?? "N/A";
+      final studentYear = student['year'] ?? "N/A";
 
-      // 🔹 Validate lecturer or substitute
-      if (lecturerId != null && lecturerId.isNotEmpty) {
-        final lecturer = await supabase
-            .from('lecturers')
-            .select()
-            .eq('lecturer_id', lecturerId)
-            .maybeSingle();
 
-        if (!mounted) return;
+      // 🔹 2. Gate Check (Prevents Proxy Attendance)
+      final twentyFourHoursAgo = now.subtract(const Duration(hours: 24)).toIso8601String();
+      
+      final gateCheck = await supabase
+          .from('gate_attendance')
+          .select('status')
+          .eq('student_id', studentId)
+          .inFilter('status', ['Early Present', 'Late Present'])
+          .gte('timestamp', twentyFourHoursAgo)
+          .maybeSingle();
 
-        if (lecturer == null) {
-          setState(() => _statusMessage = "⚠ Lecturer not found.\nID: $lecturerId");
-          return;
-        }
+      if (!mounted) return;
+      
+      if (gateCheck == null) {
+        setState(() => _statusMessage = "❌ Gate check failed. Student must clock in at the gate first.");
+        _studentController.clear();
+        return;
+      }
+
+      // 🔹 3. Timetable Validation: Check if student and lecturer are scheduled NOW
+      
+      // NOTE: This assumes an uploaded 'class_schedule' table exists in Supabase
+      // Format: Day, StartTime, EndTime, LecturerID, UnitCode, ClassName (Program + Technology + Year)
+      
+      final scheduleMatch = await supabase
+          .from('class_schedule')
+          .select('lecturer_id, unit_code, class_name')
+          .eq('day', currentDay)
+          .lte('start_time', '${now.hour}:${now.minute}') // Current time is after or equal to start
+          .gte('end_time', '${now.hour}:${now.minute}')   // Current time is before or equal to end
+          .eq('class_name', '$studentProgram - $studentTechnology - $studentYear')
+          .maybeSingle();
+
+      if (!mounted) return;
+
+      if (scheduleMatch == null) {
+        setState(() => _statusMessage = "❌ Timetable error. No class scheduled now for $studentProgram / $studentTechnology.");
+        _studentController.clear();
+        return;
+      }
+
+      final expectedLecturerId = scheduleMatch['lecturer_id'];
+
+      // 🔹 4. Lecturer Match Check
+      if (lecturerId != expectedLecturerId && _substituteId == null) {
+        setState(() => _statusMessage = "❌ Wrong class! Lecturer ID $lecturerId is not scheduled for this unit (${scheduleMatch['unit_code']}). Expected: $expectedLecturerId");
+        _studentController.clear();
+        return;
       }
 
       // 🔹 Save attendance record
@@ -105,7 +192,8 @@ class _ClassAttendancePageState extends State<ClassAttendancePage> {
         'student_id': studentId,
         'lecturer_id': lecturerId,
         'status': status,
-        'timestamp': now.toIso8601String(),
+        'unit_code': scheduleMatch['unit_code'], // Save unit code from schedule
+        'timestamp': now.toIso8601String(), 
       });
 
       if (!mounted) return;
@@ -115,11 +203,12 @@ class _ClassAttendancePageState extends State<ClassAttendancePage> {
 ✅ Attendance Recorded
 
 Student: $studentName ($studentId)
+Class: ${scheduleMatch['class_name']}
 Lecturer: ${lecturerId ?? "N/A"}
+Unit: ${scheduleMatch['unit_code']}
 Status: $status
-Time: $now
+Time: ${now.hour}:${now.minute.toString().padLeft(2, '0')}
 """;
-        _lecturerLocked = true;
         _studentController.clear();
       });
     } catch (e) {
@@ -127,6 +216,21 @@ Time: $now
       setState(() => _statusMessage = "❌ Error: $e");
     }
   }
+  
+  // Helper function to get the current day of the week as a string (e.g., Monday)
+  String _getDayOfWeek(int day) {
+    switch (day) {
+      case 1: return 'Monday';
+      case 2: return 'Tuesday';
+      case 3: return 'Wednesday';
+      case 4: return 'Thursday';
+      case 5: return 'Friday';
+      case 6: return 'Saturday';
+      case 7: return 'Sunday';
+      default: return '';
+    }
+  }
+
 
   /// Clear Lecturer (password required)
   void _clearLecturer() async {
@@ -137,7 +241,8 @@ Time: $now
         _lecturerController.clear();
         _substituteId = null;
         _lecturerLocked = false;
-        _statusMessage = "Lecturer cleared. Please re-enter.";
+        _statusMessage = "Lecturer cleared. Please enter Lecturer ID.";
+        _activeField = "lecturer";
       });
     }
   }
@@ -153,7 +258,8 @@ Time: $now
         setState(() {
           _substituteId = subId;
           _lecturerLocked = true;
-          _statusMessage = "Substitute set: $subId";
+          _activeField = "student";
+          _statusMessage = "Substitute set: $subId. Ready for student IDs.";
         });
       }
     }
@@ -170,51 +276,51 @@ Time: $now
     return false;
   }
 
- /// 🔹 Password dialog (Admin OR Staff for unlocks)
-Future<bool?> _showPasswordDialog(String title) async {
-  final controller = TextEditingController();
-  final completer = Completer<bool?>();
+  /// 🔹 Password dialog (Admin OR Staff for unlocks)
+  Future<bool?> _showPasswordDialog(String title) async {
+    final controller = TextEditingController();
+    final completer = Completer<bool?>();
 
-  showDialog<bool>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: Text(title),
-      content: TextField(
-        controller: controller,
-        obscureText: true,
-        decoration: const InputDecoration(hintText: "Enter password"),
+    showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          decoration: const InputDecoration(hintText: "Enter password"),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              completer.complete(false);
+            },
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () async {
+              final entered = controller.text.trim();
+              Navigator.pop(dialogContext); // Close immediately
+
+              // Safely perform async Supabase work *after* the dialog closes
+              final res = await supabase
+                  .from('staff_accounts')
+                  .select('password')
+                  .inFilter('role', ['admin', 'staff'])
+                  .maybeSingle();
+
+              final dbPass = res?['password'] ?? "1234";
+              completer.complete(entered == dbPass);
+            },
+            child: const Text("OK"),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.pop(dialogContext);
-            completer.complete(false);
-          },
-          child: const Text("Cancel"),
-        ),
-        TextButton(
-          onPressed: () async {
-            final entered = controller.text.trim();
-            Navigator.pop(dialogContext); // ✅ close immediately (no async context use)
+    );
 
-            // Now safely perform async Supabase work *after* the dialog closes
-            final res = await supabase
-                .from('staff_accounts')
-                .select('password')
-                .inFilter('role', ['admin', 'staff'])
-                .maybeSingle();
-
-            final dbPass = res?['password'] ?? "1234";
-            completer.complete(entered == dbPass);
-          },
-          child: const Text("OK"),
-        ),
-      ],
-    ),
-  );
-
-  return completer.future; // ✅ returns the async result safely
-}
+    return completer.future; // returns the async result safely
+  }
 
 
   /// Substitute ID input
@@ -244,17 +350,19 @@ Future<bool?> _showPasswordDialog(String title) async {
     return GestureDetector(
       onTap: onTap ?? () => _onKeyTap(label),
       child: Container(
+        width: 80, 
+        height: 80,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.white.withValues(alpha: 0.25), // ✅ updated
+          color: Colors.white.withValues(alpha: 0.25), 
         ),
         child: Center(
           child: icon != null
-              ? Icon(icon, color: Colors.white, size: 28)
+              ? Icon(icon, color: Colors.white, size: 32)
               : Text(label,
                   style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 28, 
+                      fontWeight: FontWeight.bold, 
                       color: Colors.white)),
         ),
       ),
@@ -286,78 +394,104 @@ Future<bool?> _showPasswordDialog(String title) async {
               builder: (context, constraints) {
                 bool isMobile = constraints.maxWidth < 700;
                 return Center(
-                  child: isMobile
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _buildKeypad(),
-                            const SizedBox(height: 20),
-                            _buildInfoPanel(),
-                          ],
-                        )
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _buildKeypad(),
-                            const SizedBox(width: 20),
-                            _buildInfoPanel(),
-                          ],
-                        ),
+                  // New Container for the main content box (similar to GateAttendancePage)
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    width: isMobile ? constraints.maxWidth * 0.9 : 800,
+                    height: isMobile ? null : 600,
+                    child: isMobile
+                        // Mobile Layout: Keypad over Info Panel
+                        ? Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildHeader(),
+                              const SizedBox(height: 20),
+                              _buildKeypadAndInput(),
+                              const SizedBox(height: 30),
+                              _buildInfoPanel(),
+                            ],
+                          )
+                        // Desktop/Tablet Layout: Keypad side-by-side with Info Panel
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Expanded(flex: 1, child: _buildKeypadAndInput()),
+                              const SizedBox(width: 30),
+                              Expanded(flex: 1, child: _buildInfoPanel()),
+                            ],
+                          ),
+                  ),
                 );
               },
             ),
           ),
         ),
+        // RED LOCK ICON BUTTON: Triggers password-protected exit
         floatingActionButton: FloatingActionButton(
           onPressed: _unlockAndExit,
           backgroundColor: Colors.redAccent,
-          child: const Icon(Icons.lock_open),
+          child: const Icon(Icons.lock_open, size: 30),
         ),
       ),
     );
   }
 
-  /// Keypad + Input fields
-  Widget _buildKeypad() => SizedBox(
-        width: 280,
-        child: Column(
-          children: [
-            const Text("Class Attendance",
-                style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white)),
-            const SizedBox(height: 20),
+  /// New Header Widget
+  Widget _buildHeader() => const Text(
+        "Class Attendance",
+        style: TextStyle(
+          fontSize: 32,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+        textAlign: TextAlign.center,
+      );
 
-            // Lecturer ID
-            TextField(
+  /// Keypad and Input fields (Consolidated for the new layout)
+  Widget _buildKeypadAndInput() => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Lecturer ID Input Field
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+            child: TextField(
               controller: _lecturerController,
               readOnly: true,
-              onTap: () => setState(() => _activeField = "lecturer"),
+              autofocus: true, 
+              onTap: () => setState(() => _activeField = "lecturer"), 
               style: const TextStyle(color: Colors.white, fontSize: 18),
               decoration: InputDecoration(
-                hintText: "Enter Lecturer ID#",
+                hintText: "Enter Lecturer ID#", 
                 hintStyle: const TextStyle(
                     color: Colors.white70, fontStyle: FontStyle.italic),
                 enabledBorder: const OutlineInputBorder(
                     borderSide: BorderSide(color: Colors.white54)),
                 focusedBorder: const OutlineInputBorder(
                     borderSide: BorderSide(color: Colors.blueAccent)),
-                suffixIcon: _lecturerLocked
-                    ? const Icon(Icons.lock, color: Colors.white70)
+                // Show lock icon when set
+                suffixIcon: _lecturerLocked 
+                    ? const Icon(Icons.lock, color: Colors.white70) 
                     : null,
               ),
             ),
-            const SizedBox(height: 15),
+          ),
+          const SizedBox(height: 15),
 
-            // Student ID
-            TextField(
+          // Student ID Input Field
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+            child: TextField(
               controller: _studentController,
               readOnly: true,
-              onTap: () => setState(() => _activeField = "student"),
+              onTap: () => setState(() => _activeField = "student"), 
               style: const TextStyle(color: Colors.white, fontSize: 18),
               decoration: const InputDecoration(
-                hintText: "Enter Student ID#",
+                hintText: "Enter Student ID#", 
                 hintStyle:
                     TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
                 enabledBorder: OutlineInputBorder(
@@ -366,58 +500,90 @@ Future<bool?> _showPasswordDialog(String title) async {
                     borderSide: BorderSide(color: Colors.blueAccent)),
               ),
             ),
-            const SizedBox(height: 20),
+          ),
+          const SizedBox(height: 20),
 
-            // Keypad
-            GridView.count(
+          // Keypad Grid 
+          SizedBox(
+            width: 300,
+            child: GridView.count(
               crossAxisCount: 3,
               shrinkWrap: true,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
+              mainAxisSpacing: 18, 
+              crossAxisSpacing: 18, 
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               children: [
                 for (var i = 1; i <= 9; i++) _buildKey("$i"),
-                _buildKey("", icon: Icons.backspace, onTap: _onDelete),
-                _buildKey("0"),
-                _buildKey("", icon: Icons.check, onTap: _onSubmit),
-              ],
+                _buildKey(""), // Spacer
+                _buildKey("0"), 
+                _buildKey("", icon: Icons.backspace, onTap: _onDelete), 
+                _buildKey("", icon: Icons.check, onTap: _onSubmit), 
+                _buildKey(""), // Spacer
+              ].where((widget) => widget.runtimeType != SizedBox).toList(),
             ),
+          ),
 
-            const SizedBox(height: 20),
+          const SizedBox(height: 20),
 
-            // Action buttons
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ElevatedButton(
-                    onPressed: _clearLecturer,
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.redAccent),
-                    child: const Text("Clear Lecturer")),
-                const SizedBox(width: 10),
-                ElevatedButton(
-                    onPressed: _setSubstitute,
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange),
-                    child: const Text("Substitute")),
-              ],
+          // Action buttons 
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton(
+                onPressed: _clearLecturer, 
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent), 
+                child: const Text("Clear Lecturer")), 
+              const SizedBox(width: 10), 
+              ElevatedButton(
+                onPressed: _setSubstitute, 
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange), 
+                child: const Text("Substitute")), 
+            ],
+          ),
+        ],
+      );
+
+  /// Info Panel (Updated styling to match Gate Attendance)
+  Widget _buildInfoPanel() => Container(
+        width: 340,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white54, width: 2),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildHeader(),
+            const Divider(color: Colors.white54, height: 40, thickness: 1.5),
+            const Text(
+              "STATUS / FEEDBACK",
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.5,
+              ),
+            ),
+            const SizedBox(height: 15),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Text(
+                  _statusMessage, 
+                  style: const TextStyle(color: Colors.white, fontSize: 20, height: 1.5),
+                ),
+              ),
             ),
           ],
         ),
       );
-
-  /// Info Panel
-  Widget _buildInfoPanel() => Container(
-        width: 340,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white30)),
-        child: Text(_statusMessage,
-            style: const TextStyle(color: Colors.white, fontSize: 16)),
-      );
 }
 
+// Reusable BackgroundPainter class
 class BackgroundPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {

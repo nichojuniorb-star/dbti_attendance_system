@@ -12,20 +12,22 @@ class _LecturerRegistrationState extends State<LecturerRegistration> {
   final _nameController = TextEditingController();
   final _idController = TextEditingController();
   String? _gender;
-  String? _title;
+  String? _title; // Correct variable name from source: 'title' [cite: 956]
 
-  /// 🔹 Save lecturer to Supabase
+  /// Save lecturer to Supabase
   Future<void> _saveLecturer() async {
     try {
       await Supabase.instance.client.from('lecturers').insert({
         'lecturer_id': _idController.text.trim(),
         'full_name': _nameController.text.trim(),
-        'gender': _gender, // ✅ Updated to gender
+        'gender': _gender, 
         'title': _title,
       });
 
+      // FIX APPLIED: Guarded context use (Line 27 in error report)
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("✅ Lecturer registered successfully!")),
+        const SnackBar(content: Text("✔ Lecturer registered successfully!")),
       );
 
       // Clear fields after save
@@ -36,8 +38,10 @@ class _LecturerRegistrationState extends State<LecturerRegistration> {
         _title = null;
       });
     } catch (e) {
+      // FIX APPLIED: Guarded context use (Line 39 in error report)
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("❌ Error: $e")),
+        SnackBar(content: Text("X Error: $e")),
       );
     }
   }
@@ -51,8 +55,8 @@ class _LecturerRegistrationState extends State<LecturerRegistration> {
           width: 380,
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: Colors.white, // 🔹 White background box
-            borderRadius: BorderRadius.circular(16),
+            color: Colors.white, // White background box
+            borderRadius: BorderRadius.circular(15),
             boxShadow: [
               BoxShadow(
                 color: Colors.black26,
@@ -73,26 +77,24 @@ class _LecturerRegistrationState extends State<LecturerRegistration> {
                 ),
               ),
               const SizedBox(height: 20),
-
-              /// 🔹 Full Name
+              /// Full Name
               TextField(
                 controller: _nameController,
                 style: const TextStyle(color: Colors.black),
                 decoration: _inputDecoration("Full Name"),
               ),
               const SizedBox(height: 15),
-
-              /// 🔹 Lecturer ID
+              /// Lecturer ID
               TextField(
                 controller: _idController,
                 style: const TextStyle(color: Colors.black),
                 decoration: _inputDecoration("Lecturer ID"),
               ),
               const SizedBox(height: 15),
-
-              /// 🔹 Gender Dropdown
+              // Gender Dropdown
               DropdownButtonFormField<String>(
-                 initialValue: _gender,
+                // FIX APPLIED: Replaced 'value' with 'initialValue' (Line 110 in error report)
+                initialValue: _gender,
                 onChanged: (val) => setState(() => _gender = val),
                 decoration: _inputDecoration("Gender"),
                 items: ["Male", "Female"]
@@ -104,10 +106,10 @@ class _LecturerRegistrationState extends State<LecturerRegistration> {
                     .toList(),
               ),
               const SizedBox(height: 15),
-
-              /// 🔹 Title Dropdown
+              /// Title Dropdown
               DropdownButtonFormField<String>(
-                value: _title,
+                // FIX APPLIED: Replaced 'value' with 'initialValue'
+                initialValue: _title,
                 onChanged: (val) => setState(() => _title = val),
                 decoration: _inputDecoration("Title"),
                 items: ["Mr.", "Mrs.", "Ms."]
@@ -119,8 +121,7 @@ class _LecturerRegistrationState extends State<LecturerRegistration> {
                     .toList(),
               ),
               const SizedBox(height: 25),
-
-              /// 🔹 Save Button
+              /// Save Button
               ElevatedButton(
                 onPressed: _saveLecturer,
                 style: ElevatedButton.styleFrom(
@@ -142,7 +143,7 @@ class _LecturerRegistrationState extends State<LecturerRegistration> {
     );
   }
 
-  /// 🔹 Input decoration helper
+  /// Input decoration helper (renamed from source to prevent conflicts)
   InputDecoration _inputDecoration(String label) {
     return InputDecoration(
       labelText: label,

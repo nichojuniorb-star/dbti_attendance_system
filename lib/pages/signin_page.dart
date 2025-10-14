@@ -1,3 +1,4 @@
+// [Image of Sign In Screen with Autofocus and Tab Navigation]
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -6,7 +7,8 @@ class BackgroundPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha:0.2)
+      // REVERTED to original syntax to satisfy local SDK environment
+      ..color = Colors.white.withValues(alpha: 0.2)
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 
@@ -25,7 +27,8 @@ class BackgroundPainter extends CustomPainter {
 
     // Circles
     final circlePaint = Paint()
-      ..color = Colors.white.withValues(alpha:0.25)
+      // REVERTED to original syntax to satisfy local SDK environment
+      ..color = Colors.white.withValues(alpha: 0.25)
       ..style = PaintingStyle.fill;
 
     canvas.drawCircle(
@@ -75,24 +78,57 @@ class _SignInPageState extends State<SignInPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
+  // ADDED: Focus nodes for keyboard navigation
+  final FocusNode _emailFocusNode = FocusNode();
+  final FocusNode _passwordFocusNode = FocusNode();
+
   bool _isLoading = false;
   bool _isPasswordVisible = false;
   bool _isEmailVisible = false; // 👁️ toggle for email
 
   Future<void> _signIn() async {
+    if (_emailController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Email and Password are required.")),
+          );
+        }
+        return;
+    }
+    
     setState(() => _isLoading = true);
     try {
       await Supabase.instance.client.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      Navigator.pushReplacementNamed(context, '/home');
+      if (mounted) Navigator.pushReplacementNamed(context, '/home'); // Safe navigation
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Login failed: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Login failed: $e")),
+        );
+      }
     }
     setState(() => _isLoading = false);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Automatically focus on the email field when the page loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _emailFocusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _emailFocusNode.dispose();
+    _passwordFocusNode.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override
@@ -170,7 +206,8 @@ class _SignInPageState extends State<SignInPage> {
     return Container(
       height: isMobile ? 200 : double.infinity,
       decoration: BoxDecoration(
-        color: Colors.blueAccent.shade100.withValues(alpha: 0.2),
+        // REVERTED to original syntax to satisfy local SDK environment
+        color: Colors.blueAccent.shade100.withValues(alpha: 0.2), 
         borderRadius: isMobile
             ? const BorderRadius.vertical(top: Radius.circular(20))
             : const BorderRadius.horizontal(left: Radius.circular(20)),
@@ -182,7 +219,8 @@ class _SignInPageState extends State<SignInPage> {
             left: 30,
             child: CircleAvatar(
               radius: 25,
-              backgroundColor: Colors.blueAccent.withValues(alpha:0.3),
+              // REVERTED to original syntax to satisfy local SDK environment
+              backgroundColor: Colors.blueAccent.withValues(alpha: 0.3), 
             ),
           ),
           Positioned(
@@ -190,7 +228,8 @@ class _SignInPageState extends State<SignInPage> {
             right: 40,
             child: CircleAvatar(
               radius: 40,
-              backgroundColor: Colors.teal.withValues(alpha:0.25),
+              // REVERTED to original syntax to satisfy local SDK environment
+              backgroundColor: Colors.teal.withValues(alpha: 0.25), 
             ),
           ),
           Positioned(
@@ -198,9 +237,11 @@ class _SignInPageState extends State<SignInPage> {
             left: 50,
             child: CircleAvatar(
               radius: 12,
-              backgroundColor: Colors.deepPurpleAccent.withValues(alpha:0.3),
+              // REVERTED to original syntax to satisfy local SDK environment
+              backgroundColor: Colors.deepPurpleAccent.withValues(alpha: 0.3), 
             ),
           ),
+          // Decorative elements follow...
           Positioned(
             top: 120,
             left: 20,
@@ -273,47 +314,58 @@ class _SignInPageState extends State<SignInPage> {
           ),
           const SizedBox(height: 20),
 
-          // Email field with toggle 👁️
+          // Email field with focus and navigation
           TextField(
+            autofocus: true, // Start cursor here
+            focusNode: _emailFocusNode,
             controller: _emailController,
-            obscureText: !_isEmailVisible, // 👁️ hide/show email
+            obscureText: !_isEmailVisible, 
+            textInputAction: TextInputAction.next, // TAB moves to next field
+            onSubmitted: (_) {
+              FocusScope.of(context).requestFocus(_passwordFocusNode);
+            },
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.email),
-              labelText: "Email",
+              labelText: "Email", // Existing labelText
+              hintText: "Enter your Staff/Admin Email", // New placeholder
               suffixIcon: IconButton(
                 icon: Icon(
-                  _isEmailVisible ? Icons.visibility_off : Icons.visibility,
+                  _isEmailVisible ? Icons.visibility_off : Icons.visibility, 
                 ),
                 onPressed: () {
                   setState(() => _isEmailVisible = !_isEmailVisible);
                 },
               ),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(12), 
               ),
             ),
           ),
           const SizedBox(height: 15),
 
-          // Password field with toggle 👁️
+          // Password field with focus and ENTER submission
           TextField(
+            focusNode: _passwordFocusNode,
             controller: _passwordController,
             obscureText: !_isPasswordVisible,
+            textInputAction: TextInputAction.done, // ENTER triggers submission
+            onSubmitted: (_) => _signIn(), // ENTER calls the sign-in function
             decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.lock),
-              labelText: "Password",
+              prefixIcon: const Icon(Icons.lock), 
+              labelText: "Password", // Existing labelText
+              hintText: "Enter your confidential password", // New placeholder
               suffixIcon: IconButton(
                 icon: Icon(
                   _isPasswordVisible
                       ? Icons.visibility_off
-                      : Icons.visibility,
+                      : Icons.visibility, 
                 ),
                 onPressed: () {
-                  setState(() => _isPasswordVisible = !_isPasswordVisible);
+                  setState(() => _isPasswordVisible = !_isPasswordVisible); 
                 },
               ),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(12), 
               ),
             ),
           ),
@@ -321,19 +373,19 @@ class _SignInPageState extends State<SignInPage> {
 
           // Sign-in button
           ElevatedButton(
-            onPressed: _isLoading ? null : _signIn,
+            onPressed: _isLoading ? null : _signIn, 
             style: ElevatedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 48),
-              backgroundColor: Colors.blueAccent,
+              minimumSize: const Size(double.infinity, 48), 
+              backgroundColor: Colors.blueAccent, 
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(12), 
               ),
             ),
             child: Text(
-              _isLoading ? "Signing in..." : "Sign In",
+              _isLoading ? "Signing in..." : "Sign In", 
               style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
+                color: Colors.white, 
+                fontSize: 16, 
               ),
             ),
           ),
@@ -342,7 +394,7 @@ class _SignInPageState extends State<SignInPage> {
           // Sign-up link
           TextButton(
             onPressed: () {
-              Navigator.pushReplacementNamed(context, '/signup');
+              Navigator.pushReplacementNamed(context, '/signup'); 
             },
             child: const Text(
               "Don’t have an account? Sign up",
